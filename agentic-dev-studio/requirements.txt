@@ -1,0 +1,17 @@
+# V1 Dependencies (existing)
+crewai[litellm]==0.119.0
+groq>=0.29.0
+python-dotenv==1.1.0
+jsonschema==4.23.0
+langchain-groq==0.3.5
+
+# V2 Dependencies (new)
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+celery==5.4.0
+redis==5.2.0
+supabase==2.9.1
+python-multipart==0.0.12
+pydantic[email]==2.10.3
+pydantic-settings==2.6.1
+httpx>=0.26,<0.28

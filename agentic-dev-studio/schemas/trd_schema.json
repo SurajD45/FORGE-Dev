@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "project_name": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "project_type": { "const": "api" },
+    "stack": { "const": "fastapi" },
+    "database": { "enum": ["postgresql", "sqlite"] },
+    "auth": { "enum": ["jwt", "none"] },
+    "features": { "type": "array", "items": { "type": "string" } },
+    "constraints": { "type": "array", "items": { "type": "string" } },
+    "out_of_scope": { "type": "array", "items": { "type": "string" } },
+    "overrides": { "type": "array" }
+  },
+  "required": ["project_name", "project_type", "stack", "database", "auth", "features"]
+}
