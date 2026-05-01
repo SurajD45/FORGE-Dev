@@ -46,7 +46,8 @@ def check_pipeline_limit(user_id: str, supabase: Client):
         .select('id')\
         .eq('user_id', user_id)\
         .in_('status', ['queued', 'stage_1_running', 'stage_2_running', 
-                        'stage_3_running', 'stage_4_running'])\
+                        'stage_3_running', 'stage_4_running',
+                        'awaiting_user_input'])\
         .execute()
     
     if len(result.data) >= 1:

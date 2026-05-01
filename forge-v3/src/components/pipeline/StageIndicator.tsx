@@ -8,15 +8,17 @@ interface StageIndicatorProps {
 export function StageIndicator({ status, currentStage }: StageIndicatorProps) {
   const isFailed = status === 'failed'
   const isComplete = status === 'completed'
+  const isAwaiting = status === 'awaiting_user_input'
 
   return (
     <div className="space-y-6">
       {/* Stage boxes */}
       <div className="grid grid-cols-4 gap-4">
         {STAGE_LABELS.map((stage) => {
-          const isActive = currentStage === stage.number
+          const isActive = currentStage === stage.number && !isAwaiting
           const stageComplete = currentStage > stage.number || isComplete
           const isCurrent = currentStage === stage.number
+          const isPaused = isAwaiting && stage.number === 1
 
           return (
             <div
@@ -27,6 +29,8 @@ export function StageIndicator({ status, currentStage }: StageIndicatorProps) {
                   ? 'border-forge-danger bg-red-500/10'
                   : stageComplete
                   ? 'border-forge-success bg-green-500/10'
+                  : isPaused
+                  ? 'border-amber-500 bg-amber-500/10'
                   : isActive
                   ? 'border-forge-primary bg-forge-primary/10 forge-glow'
                   : 'border-forge-border bg-forge-surface',
@@ -51,7 +55,10 @@ export function StageIndicator({ status, currentStage }: StageIndicatorProps) {
                       clipRule="evenodd" />
                   </svg>
                 )}
-                {isActive && !stageComplete && !isFailed && (
+                {isPaused && (
+                  <span className="material-symbols-outlined text-amber-400" style={{ fontSize: '16px' }}>pause_circle</span>
+                )}
+                {isActive && !stageComplete && !isFailed && !isPaused && (
                   <span className="w-2 h-2 rounded-full bg-forge-primary animate-pulse" />
                 )}
               </div>
@@ -63,6 +70,8 @@ export function StageIndicator({ status, currentStage }: StageIndicatorProps) {
                   ? 'text-forge-danger'
                   : stageComplete
                   ? 'text-forge-success'
+                  : isPaused
+                  ? 'text-amber-400'
                   : isActive
                   ? 'text-forge-primary'
                   : 'text-forge-text',
@@ -71,7 +80,9 @@ export function StageIndicator({ status, currentStage }: StageIndicatorProps) {
               </h3>
 
               {/* Stage description */}
-              <p className="text-xs text-forge-muted">{stage.description}</p>
+              <p className="text-xs text-forge-muted">
+                {isPaused ? 'Awaiting your answers' : stage.description}
+              </p>
             </div>
           )
         })}
@@ -81,7 +92,7 @@ export function StageIndicator({ status, currentStage }: StageIndicatorProps) {
       <div className="space-y-2">
         <div className="flex items-center justify-between text-xs">
           <span className="text-forge-muted">
-            {isFailed ? '❌ Pipeline failed' : isComplete ? '✅ Pipeline complete' : '⏳ Running...'}
+            {isFailed ? '❌ Pipeline failed' : isComplete ? '✅ Pipeline complete' : isAwaiting ? '⏸️ Awaiting input' : '⏳ Running...'}
           </span>
           <span className="text-forge-muted">
             {isFailed ? '0%' : isComplete ? '100%' : `${(currentStage / 4) * 100}%`}
@@ -91,7 +102,7 @@ export function StageIndicator({ status, currentStage }: StageIndicatorProps) {
           <div
             className={[
               'h-full rounded-full transition-all duration-500',
-              isFailed ? 'bg-forge-danger' : 'bg-forge-primary',
+              isFailed ? 'bg-forge-danger' : isAwaiting ? 'bg-amber-500' : 'bg-forge-primary',
             ].join(' ')}
             style={{
               width: isFailed ? '0%' : isComplete ? '100%' : `${(currentStage / 4) * 100}%`,

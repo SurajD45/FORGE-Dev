@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
 
 @tailwind base;
 @tailwind components;
@@ -14,86 +15,219 @@
   }
 
   body {
-    background:
-      radial-gradient(ellipse at top, rgba(99, 102, 241, 0.18), transparent 60%),
-      radial-gradient(ellipse at bottom, rgba(168, 85, 247, 0.12), transparent 60%),
-      #0a0a0f;
-    color: #e2e8f0;
+    background-color: #0e0e13;
+    background-image:
+      radial-gradient(ellipse 70% 50% at 15% 10%, rgba(99, 102, 241, 0.18) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 85% 80%, rgba(139, 92, 246, 0.14) 0%, transparent 60%);
+    background-attachment: fixed;
+    color: #e4e1e9;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     min-height: 100vh;
   }
 
+  /* Material Symbols */
+  .material-symbols-outlined {
+    font-family: 'Material Symbols Outlined';
+    font-weight: normal;
+    font-style: normal;
+    font-size: 24px;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    -webkit-font-feature-settings: 'liga';
+    -webkit-font-smoothing: antialiased;
+    font-variation-settings:
+      'FILL' 0,
+      'wght' 400,
+      'GRAD' 0,
+      'opsz' 24;
+  }
+
+  .material-symbols-outlined.filled {
+    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
   }
 
   ::-webkit-scrollbar-track {
-    background: rgba(18, 18, 26, 0.6);
-    backdrop-filter: blur(10px);
+    background: rgba(14, 14, 19, 0.8);
   }
 
   ::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, rgba(99, 102, 241, 0.6), rgba(168, 85, 247, 0.6));
-    border-radius: 4px;
+    background: linear-gradient(180deg, rgba(99, 102, 241, 0.5), rgba(139, 92, 246, 0.5));
+    border-radius: 3px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, rgba(99, 102, 241, 0.8), rgba(168, 85, 247, 0.8));
+    background: linear-gradient(180deg, rgba(99, 102, 241, 0.8), rgba(139, 92, 246, 0.8));
   }
 }
 
 @layer utilities {
-  /* Glass surfaces */
+  /* ── Glass surfaces ─────────────────────────────── */
   .glass {
     background: linear-gradient(
       135deg,
-      rgba(255, 255, 255, 0.08) 0%,
-      rgba(255, 255, 255, 0.03) 100%
+      rgba(255, 255, 255, 0.06) 0%,
+      rgba(255, 255, 255, 0.02) 100%
     );
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow:
-      0 8px 32px 0 rgba(0, 0, 0, 0.37),
-      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      0 8px 32px 0 rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
   .glass-strong {
     background: linear-gradient(
       135deg,
-      rgba(255, 255, 255, 0.12) 0%,
-      rgba(255, 255, 255, 0.06) 100%
+      rgba(255, 255, 255, 0.09) 0%,
+      rgba(255, 255, 255, 0.04) 100%
     );
-    backdrop-filter: blur(28px) saturate(200%);
-    -webkit-backdrop-filter: blur(28px) saturate(200%);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(32px) saturate(200%);
+    -webkit-backdrop-filter: blur(32px) saturate(200%);
+    border: 1px solid rgba(255, 255, 255, 0.10);
     box-shadow:
-      0 10px 40px 0 rgba(0, 0, 0, 0.45),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      0 12px 48px 0 rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  }
+
+  .glass-nav {
+    background: rgba(19, 19, 24, 0.85);
+    backdrop-filter: blur(32px) saturate(180%);
+    -webkit-backdrop-filter: blur(32px) saturate(180%);
+    border-right: 1px solid rgba(70, 69, 84, 0.5);
   }
 
   .glass-border-gradient {
     border: 1px solid transparent;
     background-image:
-      linear-gradient(rgba(18, 18, 26, 0.8), rgba(18, 18, 26, 0.8)),
-      linear-gradient(135deg, rgba(99, 102, 241, 0.6), rgba(168, 85, 247, 0.6));
+      linear-gradient(rgba(19, 19, 24, 0.9), rgba(19, 19, 24, 0.9)),
+      linear-gradient(135deg, rgba(99, 102, 241, 0.6), rgba(139, 92, 246, 0.6));
     background-origin: border-box;
     background-clip: padding-box, border-box;
   }
 
-  /* Glow */
+  /* ── Surface cards ──────────────────────────────── */
+  .forge-card {
+    background: #1f1f25;
+    border: 1px solid rgba(70, 69, 84, 0.5);
+    border-radius: 16px;
+    box-shadow:
+      0 4px 24px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .forge-card-glow {
+    background: #1f1f25;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: 16px;
+    box-shadow:
+      0 4px 24px rgba(0, 0, 0, 0.3),
+      0 0 0 1px rgba(99, 102, 241, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .forge-surface {
+    background: #1f1f25;
+    border: 1px solid rgba(70, 69, 84, 0.4);
+  }
+
+  /* ── Glows ──────────────────────────────────────── */
   .forge-glow {
-    box-shadow: 0 0 30px rgba(99, 102, 241, 0.18);
+    box-shadow: 0 0 24px rgba(99, 102, 241, 0.25), 0 0 8px rgba(99, 102, 241, 0.1);
+  }
+
+  .forge-glow-sm {
+    box-shadow: 0 0 12px rgba(99, 102, 241, 0.2);
   }
 
   .forge-glow-accent {
-    box-shadow: 0 0 30px rgba(168, 85, 247, 0.18);
+    box-shadow: 0 0 30px rgba(139, 92, 246, 0.25);
   }
 
-  /* Animations */
+  .forge-glow-success {
+    box-shadow: 0 0 20px rgba(109, 213, 140, 0.2);
+  }
+
+  /* ── Text gradients ─────────────────────────────── */
+  .text-gradient-primary {
+    background: linear-gradient(135deg, #c0c1ff, #8083ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-forge {
+    background: linear-gradient(135deg, #c0c1ff 0%, #89ceff 50%, #cfbcff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ── Buttons ────────────────────────────────────── */
+  .btn-primary {
+    background: linear-gradient(135deg, #6366f1, #8083ff);
+    color: #fff;
+    border: 1px solid rgba(192, 193, 255, 0.15);
+    box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35), inset 0 1px 0 rgba(255,255,255,0.1);
+    transition: all 0.2s ease;
+  }
+
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #4f46e5, #6366f1);
+    box-shadow: 0 6px 24px rgba(99, 102, 241, 0.5), inset 0 1px 0 rgba(255,255,255,0.12);
+    transform: translateY(-1px);
+  }
+
+  .btn-primary:active {
+    transform: translateY(0);
+  }
+
+  /* ── Progress bars ──────────────────────────────── */
+  .forge-progress {
+    background: rgba(70, 69, 84, 0.4);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+
+  .forge-progress-fill {
+    background: linear-gradient(90deg, #6366f1, #8b5cf6);
+    border-radius: 99px;
+    transition: width 0.5s ease;
+    box-shadow: 0 0 8px rgba(99, 102, 241, 0.4);
+  }
+
+  /* ── Log terminal ───────────────────────────────── */
+  .log-terminal {
+    background: #0e0e13;
+    border: 1px solid rgba(70, 69, 84, 0.4);
+    border-radius: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+
+  /* ── Noise overlay ──────────────────────────────── */
+  .noise-overlay::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Animations ─────────────────────────────────── */
   .animate-fade-in {
     animation: fadeIn 0.35s ease-out forwards;
   }
@@ -102,29 +236,81 @@
     animation: slideUp 0.45s ease-out forwards;
   }
 
+  .animate-slide-right {
+    animation: slideRight 0.35s ease-out forwards;
+  }
+
   .animate-shimmer {
     background: linear-gradient(
       90deg,
-      rgba(255, 255, 255, 0.04) 0%,
-      rgba(255, 255, 255, 0.10) 50%,
-      rgba(255, 255, 255, 0.04) 100%
+      rgba(255, 255, 255, 0.03) 0%,
+      rgba(255, 255, 255, 0.08) 50%,
+      rgba(255, 255, 255, 0.03) 100%
     );
     background-size: 200% 100%;
     animation: shimmer 1.8s infinite;
   }
 
   @keyframes fadeIn {
-    from { opacity: 0 }
-    to { opacity: 1 }
+    from { opacity: 0; }
+    to   { opacity: 1; }
   }
 
   @keyframes slideUp {
-    from { opacity: 0; transform: translateY(16px) }
-    to { opacity: 1; transform: translateY(0) }
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes slideRight {
+    from { opacity: 0; transform: translateX(-16px); }
+    to   { opacity: 1; transform: translateX(0); }
   }
 
   @keyframes shimmer {
-    0% { background-position: 200% 0 }
-    100% { background-position: -200% 0 }
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  @keyframes glowPulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(99,102,241,0.2); }
+    50%       { box-shadow: 0 0 40px rgba(99,102,241,0.5); }
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50%       { transform: translateY(-8px); }
+  }
+
+  @keyframes logScroll {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Tooltip ────────────────────────────────────── */
+  .forge-tooltip {
+    position: relative;
+  }
+
+  .forge-tooltip::after {
+    content: attr(data-tip);
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: #2a292f;
+    color: #e4e1e9;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    border: 1px solid rgba(70, 69, 84, 0.6);
+    transition: opacity 0.15s ease;
+  }
+
+  .forge-tooltip:hover::after {
+    opacity: 1;
   }
 }

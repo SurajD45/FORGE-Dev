@@ -5,14 +5,15 @@ from typing import List
 
 from api.dependencies import get_supabase_client, get_current_user
 from api.models.schemas import (
-    SubmitProjectRequest, 
+    SubmitProjectRequest,
+    ResumeProjectRequest,
     SubmitProjectResponse,
     PipelineStatusResponse,
     PipelineResultResponse,
     PipelineStatus,
     ArtifactResponse
 )
-from api.worker.tasks import run_pipeline_task
+from api.worker.tasks import run_pipeline_task, resume_pipeline_task
 from api.utils.storage_uploader import get_artifact_download_urls
 
 router = APIRouter(prefix="/pipeline", tags=["Pipeline"])
@@ -29,7 +30,9 @@ async def submit_project(
         "user_id": current_user.id,
         "project_idea": request.project_idea,
         "status": PipelineStatus.QUEUED.value,
-        "current_stage": 0
+        "current_stage": 0,
+        "conversation_history": [],
+        "current_round": 0
     }).execute()
     
     pipeline_id = pipeline_run.data[0]['id']
@@ -39,6 +42,70 @@ async def submit_project(
         pipeline_id=pipeline_id,
         status=PipelineStatus.QUEUED,
         message="Pipeline queued successfully."
+    )
+
+
+@router.post("/resume", response_model=SubmitProjectResponse)
+async def resume_project(
+    request: ResumeProjectRequest,
+    current_user = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client)
+):
+    """Resume a pipeline that is awaiting user input"""
+    # Fetch the pipeline run
+    result = supabase.table('pipeline_runs')\
+        .select('*')\
+        .eq('id', request.pipeline_id)\
+        .eq('user_id', current_user.id)\
+        .execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Pipeline not found")
+    
+    run = result.data[0]
+    
+    if run['status'] != PipelineStatus.AWAITING_USER_INPUT.value:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Pipeline is not awaiting input. Current status: {run['status']}"
+        )
+    
+    # Append the user's answers to the conversation history
+    existing_history = run.get('conversation_history', []) or []
+    questions = run.get('explorer_questions', []) or []
+    
+    # Build a structured Q&A entry for the conversation history
+    # Each entry pairs questions with their corresponding answers
+    qa_pairs = []
+    for i, q in enumerate(questions):
+        q_text = q.get('question', str(q)) if isinstance(q, dict) else str(q)
+        a_text = request.answers[i] if i < len(request.answers) else ''
+        qa_pairs.append(f"Q: {q_text} → A: {a_text}")
+    
+    existing_history.append({
+        "round": (run.get('current_round', 0) or 0) + 1,
+        "qa_pairs": qa_pairs,
+        "raw_answers": request.answers
+    })
+    
+    current_round = (run.get('current_round', 0) or 0) + 1
+    
+    # Update the pipeline record: back to stage_1_running
+    supabase.table('pipeline_runs').update({
+        'status': PipelineStatus.STAGE_1_RUNNING.value,
+        'current_stage': 1,
+        'conversation_history': existing_history,
+        'current_round': current_round,
+        'explorer_questions': None  # Clear stale questions
+    }).eq('id', request.pipeline_id).execute()
+    
+    # Dispatch a new Celery task to resume the pipeline
+    resume_pipeline_task.delay(request.pipeline_id, current_user.id)
+    
+    return SubmitProjectResponse(
+        pipeline_id=request.pipeline_id,
+        status=PipelineStatus.STAGE_1_RUNNING,
+        message="Pipeline resumed. Explorer Agent re-engaged."
     )
 
 
@@ -61,7 +128,9 @@ async def list_pipeline_runs(
             current_stage=r['current_stage'],
             created_at=r['created_at'],
             updated_at=r['updated_at'],
-            error_message=r.get('error_message')
+            error_message=r.get('error_message'),
+            project_idea=r.get('project_idea'),
+            questions=r.get('explorer_questions')
         )
         for r in result.data
     ]
@@ -91,7 +160,9 @@ async def get_pipeline_status(
         current_stage=run['current_stage'],
         created_at=run['created_at'],
         updated_at=run['updated_at'],
-        error_message=run.get('error_message')
+        error_message=run.get('error_message'),
+        project_idea=run.get('project_idea'),
+        questions=run.get('explorer_questions')
     )
 
 
@@ -103,7 +174,7 @@ async def get_pipeline_result(
 ):
     """Get pipeline results with download URLs"""
     run_result = supabase.table('pipeline_runs')\
-        .select('status')\
+        .select('status, project_idea')\
         .eq('id', pipeline_id)\
         .eq('user_id', current_user.id)\
         .execute()
@@ -131,5 +202,6 @@ async def get_pipeline_result(
     return PipelineResultResponse(
         pipeline_id=pipeline_id,
         status=PipelineStatus.COMPLETED,
-        artifacts=artifacts
+        artifacts=artifacts,
+        project_idea=run_result.data[0].get('project_idea')
     )

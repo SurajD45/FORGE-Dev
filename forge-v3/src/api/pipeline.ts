@@ -4,6 +4,7 @@ import type {
   SubmitProjectResponse,
   PipelineStatusResponse,
   PipelineResultResponse,
+  ResumeProjectRequest,
 } from '@/types/pipeline'
 
 export const pipelineApi = {
@@ -28,6 +29,11 @@ export const pipelineApi = {
 
   listRuns: async (): Promise<PipelineStatusResponse[]> => {
     const response = await apiClient.get<PipelineStatusResponse[]>('/pipeline/runs')
+    return response.data
+  },
+
+  resume: async (data: ResumeProjectRequest): Promise<SubmitProjectResponse> => {
+    const response = await apiClient.post<SubmitProjectResponse>('/pipeline/resume', data)
     return response.data
   },
 }

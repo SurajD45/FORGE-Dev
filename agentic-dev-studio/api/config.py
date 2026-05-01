@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     # Rate limiting
     max_concurrent_pipelines_per_user: int = 1
     
+    # Schema migration
+    auto_migrate_db: bool = False
+    
     class Config:
         env_file = ".env"
         case_sensitive = False

@@ -1,6 +1,7 @@
 export type PipelineStatus =
   | 'queued'
   | 'stage_1_running'
+  | 'awaiting_user_input'
   | 'stage_2_running'
   | 'stage_3_running'
   | 'stage_4_running'
@@ -26,6 +27,11 @@ export interface SubmitProjectResponse {
   message: string
 }
 
+export interface ResumeProjectRequest {
+  pipeline_id: string
+  answers: string[]
+}
+
 export interface PipelineStatusResponse {
   pipeline_id: string
   status: PipelineStatus
@@ -33,6 +39,8 @@ export interface PipelineStatusResponse {
   created_at: string
   updated_at: string
   error_message: string | null
+  project_idea: string | null
+  questions: unknown[] | null
 }
 
 export interface ArtifactResponse {
@@ -45,23 +53,25 @@ export interface PipelineResultResponse {
   pipeline_id: string
   status: PipelineStatus
   artifacts: ArtifactResponse[]
+  project_idea: string | null
 }
 
 export interface StageInfo {
   number: number
   label: string
   description: string
-  status: 'waiting' | 'running' | 'complete' | 'failed'
+  status: 'waiting' | 'running' | 'complete' | 'failed' | 'paused'
 }
 
 export const STAGE_MAP: Record<PipelineStatus, number> = {
-  queued:           0,
-  stage_1_running:  1,
-  stage_2_running:  2,
-  stage_3_running:  3,
-  stage_4_running:  4,
-  completed:        5,
-  failed:          -1,
+  queued:                0,
+  stage_1_running:       1,
+  awaiting_user_input:   1,
+  stage_2_running:       2,
+  stage_3_running:       3,
+  stage_4_running:       4,
+  completed:             5,
+  failed:               -1,
 }
 
 export const STAGE_LABELS = [

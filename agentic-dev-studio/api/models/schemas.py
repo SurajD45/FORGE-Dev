@@ -1,6 +1,6 @@
 """Pydantic schemas for V2 API"""
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime
 from enum import Enum
 
@@ -8,6 +8,7 @@ from enum import Enum
 class PipelineStatus(str, Enum):
     QUEUED = "queued"
     STAGE_1_RUNNING = "stage_1_running"
+    AWAITING_USER_INPUT = "awaiting_user_input"
     STAGE_2_RUNNING = "stage_2_running"
     STAGE_3_RUNNING = "stage_3_running"
     STAGE_4_RUNNING = "stage_4_running"
@@ -32,6 +33,17 @@ class SubmitProjectRequest(BaseModel):
         description="Natural language description of the project"
     )
 
+class ResumeProjectRequest(BaseModel):
+    pipeline_id: str = Field(
+        ...,
+        description="UUID of the pipeline run to resume"
+    )
+    answers: List[str] = Field(
+        ...,
+        min_length=1,
+        description="User's answers to the Explorer Agent's questions"
+    )
+
 class AuthRegisterRequest(BaseModel):
     email: str
     password: str = Field(..., min_length=6)
@@ -53,6 +65,8 @@ class PipelineStatusResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     error_message: Optional[str] = None
+    project_idea: Optional[str] = None
+    questions: Optional[List[Any]] = None
 
 class ArtifactResponse(BaseModel):
     artifact_type: ArtifactType
@@ -63,6 +77,7 @@ class PipelineResultResponse(BaseModel):
     pipeline_id: str
     status: PipelineStatus
     artifacts: List[ArtifactResponse]
+    project_idea: Optional[str] = None
 
 class AuthResponse(BaseModel):
     access_token: str

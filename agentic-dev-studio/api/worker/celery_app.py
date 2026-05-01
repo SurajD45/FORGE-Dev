@@ -27,3 +27,14 @@ celery_app.conf.update(
     broker_use_ssl=broker_use_ssl,  # ← ADD THIS
     redis_backend_use_ssl=broker_use_ssl,  # ← ADD THIS
 )
+
+
+# Schema validation on worker startup
+from celery.signals import worker_ready
+
+@worker_ready.connect
+def on_worker_ready(**kwargs):
+    """Validate database schema before accepting any tasks."""
+    from api.utils.db_migrator import validate_schema_or_die
+    from api.config import get_settings
+    validate_schema_or_die(get_settings())

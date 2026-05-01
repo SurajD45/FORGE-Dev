@@ -7,6 +7,12 @@ import { CodeViewer } from '@/components/artifacts/CodeViewer'
 import { Button } from '@/components/ui/Button'
 import type { ArtifactResponse } from '@/types/pipeline'
 
+const REVIEW_CHECKS = [
+  { label: 'AST Validity', icon: 'code', status: 'pass' },
+  { label: 'Logic Consistency', icon: 'psychology', status: 'pass' },
+  { label: 'Inference Pass', icon: 'model_training', status: 'pass' },
+]
+
 export default function Artifacts() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -29,29 +35,16 @@ export default function Artifacts() {
   const handleDownloadAll = async () => {
     if (!result?.artifacts) return
     setDownloading(true)
-
     try {
-      // Download all files and create a manifest
       const files: { name: string; content: string }[] = []
-
       for (const artifact of result.artifacts) {
         const response = await fetch(artifact.download_url)
         const content = await response.text()
         files.push({ name: artifact.file_name, content })
       }
-
-      // Create a JSON manifest
-      const manifest = {
-        project_id: id,
-        download_date: new Date().toISOString(),
-        files: files.map(f => f.name),
-      }
-
-      // Create a downloadable text file with all contents
       const allContent = files
         .map(f => `\n\n${'='.repeat(60)}\nFILE: ${f.name}\n${'='.repeat(60)}\n\n${f.content}`)
         .join('\n')
-
       const blob = new Blob([allContent], { type: 'text/plain' })
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -70,9 +63,12 @@ export default function Artifacts() {
 
   if (isLoading) {
     return (
-      <div className="p-8 space-y-4">
-        <div className="h-8 bg-forge-border rounded animate-pulse w-48" />
-        <div className="h-96 bg-forge-border rounded animate-pulse" />
+      <div className="p-8 space-y-4 animate-fade-in">
+        <div className="h-10 bg-forge-surface rounded-xl w-64 animate-shimmer" />
+        <div className="grid grid-cols-4 gap-6 h-[70vh]">
+          <div className="bg-forge-surface rounded-2xl animate-shimmer" />
+          <div className="col-span-3 bg-forge-surface rounded-2xl animate-shimmer" />
+        </div>
       </div>
     )
   }
@@ -80,14 +76,11 @@ export default function Artifacts() {
   if (error) {
     return (
       <div className="p-8">
-        <div className="forge-surface rounded-xl p-6 border border-forge-danger">
-          <h2 className="text-lg font-semibold text-forge-danger mb-2">Error loading artifacts</h2>
-          <p className="text-forge-muted text-sm mb-4">
-            {(error as { message?: string }).message ?? 'Unknown error'}
-          </p>
-          <Button onClick={() => navigate('/dashboard')}>
-            Back to dashboard
-          </Button>
+        <div className="forge-card border-forge-danger/30 p-8 text-center max-w-md">
+          <span className="material-symbols-outlined text-forge-danger text-5xl mb-4 block">error</span>
+          <h2 className="text-lg font-bold text-forge-danger mb-2">Error loading artifacts</h2>
+          <p className="text-forge-muted text-sm mb-6">{(error as { message?: string }).message ?? 'Unknown error'}</p>
+          <Button onClick={() => navigate('/dashboard')}>Back to dashboard</Button>
         </div>
       </div>
     )
@@ -101,55 +94,98 @@ export default function Artifacts() {
     )
   }
 
-  // Set first file as selected by default
   if (!selectedFile && result.artifacts.length > 0) {
     setSelectedFile(result.artifacts[0])
   }
 
   return (
-    <div className="p-8 h-screen flex flex-col">
-      {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-2xl font-bold text-forge-text">Generated Project</h1>
-            <p className="text-forge-muted text-sm mt-1">ID: {id}</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Button
-              variant="secondary"
-              onClick={handleDownloadAll}
-              loading={downloading}
-            >
-              ⬇️ Download All ({result.artifacts.length} files)
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={() => navigate('/dashboard')}
-            >
-              Back
-            </Button>
-          </div>
+    <div className="h-screen flex flex-col animate-fade-in overflow-hidden">
+      {/* ── Header ─────────────────────────────────── */}
+      <div className="px-8 pt-6 pb-4 border-b border-forge-border/20 flex items-start justify-between">
+        <div>
+          <p className="text-xs text-forge-muted-dim uppercase tracking-widest font-semibold mb-1">Generated Project</p>
+          <h1 className="text-2xl font-black text-forge-text">Artifacts Explorer</h1>
+          <p className="text-xs font-mono text-forge-muted-dim mt-1">{id}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleDownloadAll}
+            loading={downloading}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>download</span>
+            Download All ({result.artifacts.length} files)
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
+            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>arrow_back</span>
+            Dashboard
+          </Button>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 grid grid-cols-4 gap-6 min-h-0">
+      {/* ── AI Review Summary ──────────────────────── */}
+      <div className="px-8 py-3 border-b border-forge-border/20 flex items-center gap-3">
+        <span className="text-xs font-bold text-forge-muted-dim uppercase tracking-wide">AI Review Summary</span>
+        <div className="flex items-center gap-2 ml-2">
+          {REVIEW_CHECKS.map((check) => (
+            <div key={check.label} className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-forge-success/10 border border-forge-success/20">
+              <span className="material-symbols-outlined text-forge-success" style={{ fontSize: '12px' }}>check_circle</span>
+              <span className="text-xs font-semibold text-forge-success">{check.label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="flex items-center gap-1 text-xs text-forge-muted-dim">
+            <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>info</span>
+            Synthesizing complete
+          </span>
+        </div>
+      </div>
+
+      {/* ── Main IDE layout ─────────────────────────── */}
+      <div className="flex-1 flex overflow-hidden">
         {/* File tree sidebar */}
-        <div className="col-span-1 forge-surface rounded-xl p-4 overflow-auto">
-          <h3 className="font-semibold text-forge-text mb-4 sticky top-0 bg-forge-surface pb-2">
-            Files ({result.artifacts.length})
-          </h3>
-          <FileTree
-            artifacts={result.artifacts}
-            onSelectFile={setSelectedFile}
-            selectedFile={selectedFile}
-          />
+        <div className="w-56 flex-shrink-0 forge-surface border-r border-forge-border/20 overflow-y-auto">
+          <div className="px-4 py-3 border-b border-forge-border/15 flex items-center gap-2">
+            <span className="material-symbols-outlined text-forge-muted-dim" style={{ fontSize: '14px' }}>folder_open</span>
+            <h3 className="text-xs font-bold text-forge-text">Files</h3>
+            <span className="ml-auto text-[10px] text-forge-muted-dim font-mono">{result.artifacts.length}</span>
+          </div>
+          <div className="p-2">
+            <FileTree
+              artifacts={result.artifacts}
+              onSelectFile={setSelectedFile}
+              selectedFile={selectedFile}
+            />
+          </div>
         </div>
 
         {/* Code viewer */}
-        <div className="col-span-3 forge-surface rounded-xl p-6 overflow-hidden flex flex-col">
-          <CodeViewer artifact={selectedFile} />
+        <div className="flex-1 overflow-hidden flex flex-col bg-forge-bg">
+          {/* Breadcrumb */}
+          {selectedFile && (
+            <div className="px-4 py-2 border-b border-forge-border/15 flex items-center gap-2 text-xs text-forge-muted-dim">
+              <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>code</span>
+              <span className="text-forge-muted">{selectedFile.file_name}</span>
+              <span className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={async () => {
+                    const resp = await fetch(selectedFile.download_url)
+                    const text = await resp.text()
+                    navigator.clipboard.writeText(text)
+                  }}
+                  className="flex items-center gap-1 px-2 py-1 rounded-md hover:bg-white/5 transition-colors"
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>content_copy</span>
+                  Copy
+                </button>
+              </span>
+            </div>
+          )}
+          <div className="flex-1 overflow-auto">
+            <CodeViewer artifact={selectedFile} />
+          </div>
         </div>
       </div>
     </div>

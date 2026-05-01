@@ -3,9 +3,33 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { pipelineApi } from '@/api/pipeline'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
-import { formatDateTime, formatRelativeTime, formatStatus } from '@/utils/format'
+import { formatRelativeTime, formatStatus } from '@/utils/format'
 import type { PipelineStatus } from '@/types/pipeline'
+
+const STATUS_CONFIG: Record<string, { color: string; icon: string; label: string; dot: string }> = {
+  completed: { color: 'text-forge-success', icon: 'check_circle', label: 'Completed', dot: 'bg-forge-success' },
+  failed: { color: 'text-forge-danger', icon: 'error', label: 'Failed', dot: 'bg-forge-danger' },
+  queued: { color: 'text-forge-muted', icon: 'schedule', label: 'Queued', dot: 'bg-forge-muted' },
+  awaiting_user_input: { color: 'text-amber-400', icon: 'pause_circle', label: 'Awaiting Input', dot: 'bg-amber-400' },
+  stage_1_running: { color: 'text-forge-primary', icon: 'sync', label: 'Stage 1', dot: 'bg-forge-primary' },
+  stage_2_running: { color: 'text-forge-primary', icon: 'sync', label: 'Stage 2', dot: 'bg-forge-primary' },
+  stage_3_running: { color: 'text-forge-primary', icon: 'sync', label: 'Stage 3', dot: 'bg-forge-primary' },
+  stage_4_running: { color: 'text-forge-primary', icon: 'sync', label: 'Stage 4', dot: 'bg-forge-primary' },
+}
+
+function getStatusConfig(status: PipelineStatus) {
+  return STATUS_CONFIG[status] ?? { color: 'text-forge-muted', icon: 'radio_button_unchecked', label: status, dot: 'bg-forge-muted' }
+}
+
+function getStageProgress(status: PipelineStatus): number {
+  if (status === 'completed') return 100
+  if (status === 'failed') return 0
+  const stageMap: Record<string, number> = {
+    queued: 0, stage_1_running: 25, awaiting_user_input: 20,
+    stage_2_running: 50, stage_3_running: 75, stage_4_running: 90
+  }
+  return stageMap[status] ?? 0
+}
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -14,187 +38,155 @@ export default function Dashboard() {
   const { data: runs, isLoading, error, refetch } = useQuery({
     queryKey: ['pipeline', 'runs'],
     queryFn: () => pipelineApi.listRuns(),
-    refetchInterval: 10000, // auto-refresh every 10s
+    refetchInterval: 10000,
   })
 
-  const getStatusBadgeVariant = (status: PipelineStatus) => {
-    switch (status) {
-      case 'completed':
-        return 'pass'
-      case 'failed':
-        return 'fail'
-      case 'queued':
-      case 'stage_1_running':
-      case 'stage_2_running':
-      case 'stage_3_running':
-      case 'stage_4_running':
-        return 'info'
-      default:
-        return 'default'
-    }
-  }
+  const totalRuns = runs?.length ?? 0
+  const completed = runs?.filter(r => r.status === 'completed').length ?? 0
+  const failed = runs?.filter(r => r.status === 'failed').length ?? 0
+  const running = runs?.filter(r => !['completed', 'failed'].includes(r.status)).length ?? 0
 
   return (
-    <div className="p-8 animate-fade-in">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-extrabold text-forge-text mb-2">Dashboard</h1>
-            <p className="text-lg text-forge-muted">
-              Welcome back, <span className="text-forge-primary font-semibold">{user?.email}</span>
+    <div className="p-6 lg:p-8 animate-fade-in min-h-screen">
+      {/* ── Header ─────────────────────────────────── */}
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <p className="text-xs text-forge-muted-dim uppercase tracking-widest font-semibold mb-1">Welcome back</p>
+          <h1 className="text-3xl font-black text-forge-text">Agent Intelligence Hub</h1>
+          <p className="text-forge-muted mt-1 text-sm">
+            Real-time performance metrics for{' '}
+            <span className="text-forge-primary font-semibold">{user?.email}</span>
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => refetch()}
+            className="w-9 h-9 rounded-xl glass border border-forge-border/40 flex items-center justify-center text-forge-muted hover:text-forge-text transition-all hover:border-forge-primary/30"
+            title="Refresh"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>refresh</span>
+          </button>
+          <Button size="md" onClick={() => navigate('/run/new')}>
+            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>add</span>
+            New Run
+          </Button>
+        </div>
+      </div>
+
+      {/* ── Stats ──────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {[
+          { label: 'Total Runs', value: totalRuns, icon: 'summarize', color: 'text-forge-text', bg: 'bg-forge-surface/60' },
+          { label: 'Completed', value: completed, icon: 'check_circle', color: 'text-forge-success', bg: 'bg-forge-success/10' },
+          { label: 'Running', value: running, icon: 'sync', color: 'text-forge-primary', bg: 'bg-forge-primary/10' },
+          { label: 'Failed', value: failed, icon: 'error', color: 'text-forge-danger', bg: 'bg-forge-danger/10' },
+        ].map((stat) => (
+          <div key={stat.label} className="forge-card p-5">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs text-forge-muted-dim uppercase tracking-wide font-semibold">{stat.label}</p>
+              <div className={`w-8 h-8 rounded-xl ${stat.bg} flex items-center justify-center`}>
+                <span className={`material-symbols-outlined ${stat.color}`} style={{ fontSize: '16px' }}>{stat.icon}</span>
+              </div>
+            </div>
+            <p className={`text-3xl font-black ${isLoading ? 'animate-shimmer rounded' : stat.color}`}>
+              {isLoading ? '—' : stat.value}
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <Button variant="secondary" onClick={() => refetch()}>
-              🔄 Refresh
-            </Button>
-            <Button size="lg" onClick={() => navigate('/run/new')}>
-              + New Run
-            </Button>
+        ))}
+      </div>
+
+      {/* ── Recent Runs ─────────────────────────────── */}
+      <div className="forge-card overflow-hidden">
+        {/* Table header */}
+        <div className="px-6 py-4 border-b border-forge-border/30 flex items-center justify-between">
+          <h2 className="text-sm font-bold text-forge-text flex items-center gap-2">
+            <span className="material-symbols-outlined text-forge-primary" style={{ fontSize: '16px' }}>history</span>
+            Recent Execution Logs
+          </h2>
+          {running > 0 && (
+            <span className="flex items-center gap-1.5 text-xs text-forge-primary font-semibold px-3 py-1 rounded-full bg-forge-primary/10 border border-forge-primary/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-forge-primary animate-pulse" />
+              {running} active
+            </span>
+          )}
+        </div>
+
+        {/* Loading */}
+        {isLoading && (
+          <div className="p-8 space-y-3">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-16 rounded-xl animate-shimmer bg-forge-surface-low" />
+            ))}
           </div>
-        </div>
-      </div>
+        )}
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-6 mb-8">
-        <div className="glass-strong rounded-2xl p-6 border border-forge-border">
-          <p className="text-xs text-forge-muted uppercase tracking-wide font-semibold mb-2">Total Runs</p>
-          <p className="text-4xl font-extrabold text-forge-text">
-            {runs?.length ?? '—'}
-          </p>
-        </div>
-        <div className="glass-strong rounded-2xl p-6 border border-forge-border">
-          <p className="text-xs text-forge-muted uppercase tracking-wide font-semibold mb-2">Completed</p>
-          <p className="text-4xl font-extrabold text-forge-success">
-            {runs?.filter(r => r.status === 'completed').length ?? '—'}
-          </p>
-        </div>
-        <div className="glass-strong rounded-2xl p-6 border border-forge-border">
-          <p className="text-xs text-forge-muted uppercase tracking-wide font-semibold mb-2">Failed</p>
-          <p className="text-4xl font-extrabold text-forge-danger">
-            {runs?.filter(r => r.status === 'failed').length ?? '—'}
-          </p>
-        </div>
-      </div>
+        {/* Error */}
+        {error && (
+          <div className="p-8 flex items-center gap-3 text-forge-danger">
+            <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>error</span>
+            <p className="text-sm">Error loading runs: {(error as { message?: string }).message ?? 'Unknown error'}</p>
+          </div>
+        )}
 
-      {/* Runs Table */}
-      <div className="glass-strong rounded-2xl overflow-hidden border border-forge-border">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-white/5 border-b border-forge-border">
-              <tr>
-                <th className="px-6 py-4 text-left text-xs font-bold text-forge-muted uppercase tracking-wider">
-                  Pipeline ID
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-forge-muted uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-forge-muted uppercase tracking-wider">
-                  Created
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-forge-muted uppercase tracking-wider">
-                  Updated
-                </th>
-                <th className="px-6 py-4 text-right text-xs font-bold text-forge-muted uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-forge-border/50">
-              {isLoading && (
-                <tr>
-                  <td colSpan={5} className="px-6 py-8">
-                    <div className="flex items-center gap-3 text-forge-muted">
-                      <div className="animate-spin">
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
-                      </div>
-                      <span className="text-sm">Loading runs...</span>
-                    </div>
-                  </td>
-                </tr>
-              )}
+        {/* Empty */}
+        {!isLoading && !error && runs?.length === 0 && (
+          <div className="p-16 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-forge-primary/10 flex items-center justify-center mx-auto mb-4">
+              <span className="material-symbols-outlined text-forge-primary" style={{ fontSize: '32px' }}>rocket_launch</span>
+            </div>
+            <p className="text-forge-text font-bold text-lg mb-2">No runs yet</p>
+            <p className="text-forge-muted text-sm mb-6">Start by creating your first pipeline run</p>
+            <Button onClick={() => navigate('/run/new')}>Create your first run</Button>
+          </div>
+        )}
 
-              {error && (
-                <tr>
-                  <td colSpan={5} className="px-6 py-8">
-                    <div className="text-forge-danger text-sm">
-                      Error loading runs: {(error as { message?: string }).message ?? 'Unknown error'}
-                    </div>
-                  </td>
-                </tr>
-              )}
-
-              {!isLoading && !error && runs?.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-forge-primary/10 mb-4">
-                      <svg className="w-8 h-8 text-forge-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                    </div>
-                    <p className="text-forge-text font-semibold text-lg mb-2">No runs yet</p>
-                    <p className="text-forge-muted mb-6">Start by creating your first pipeline run</p>
-                    <Button onClick={() => navigate('/run/new')}>
-                      Create your first run
-                    </Button>
-                  </td>
-                </tr>
-              )}
-
-              {runs?.map(run => (
-                <tr
+        {/* Run cards */}
+        {runs && runs.length > 0 && (
+          <div className="divide-y divide-forge-border/20">
+            {runs.map((run) => {
+              const cfg = getStatusConfig(run.status)
+              const progress = getStageProgress(run.status)
+              const isActive = !['completed', 'failed'].includes(run.status)
+              return (
+                <div
                   key={run.pipeline_id}
-                  className="hover:bg-white/5 transition-colors"
+                  className="px-6 py-4 flex items-center gap-4 hover:bg-white/3 transition-colors group cursor-pointer"
+                  onClick={() => navigate(run.status === 'completed' ? `/run/${run.pipeline_id}/artifacts` : `/run/${run.pipeline_id}`)}
                 >
-                  <td className="px-6 py-4">
-                    <code className="text-sm font-mono text-forge-text">
-                      {run.pipeline_id.slice(0, 8)}...
-                    </code>
-                  </td>
-                  <td className="px-6 py-4">
-                    <Badge variant={getStatusBadgeVariant(run.status)}>
-                      {formatStatus(run.status)}
-                    </Badge>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-forge-muted">
-                    <span title={formatDateTime(run.created_at)}>
-                      {formatRelativeTime(run.created_at)}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-forge-muted">
-                    <span title={formatDateTime(run.updated_at)}>
-                      {formatRelativeTime(run.updated_at)}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right space-x-2">
-                    {run.status === 'completed' ? (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => navigate(`/run/${run.pipeline_id}/artifacts`)}
-                      >
-                        View artifacts
-                      </Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => navigate(`/run/${run.pipeline_id}`)}
-                      >
-                        View progress
-                      </Button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  {/* Status indicator */}
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot} ${isActive ? 'animate-pulse' : ''}`} />
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-1">
+                      <code className="text-sm font-mono text-forge-text font-semibold">
+                        {run.pipeline_id.slice(0, 12)}…
+                      </code>
+                      <span className={`flex items-center gap-1 text-xs font-semibold ${cfg.color}`}>
+                        <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>{cfg.icon}</span>
+                        {formatStatus(run.status)}
+                      </span>
+                    </div>
+                    {/* Progress bar */}
+                    <div className="forge-progress h-1 w-full max-w-xs">
+                      <div className="forge-progress-fill h-full" style={{ width: `${progress}%` }} />
+                    </div>
+                  </div>
+
+                  {/* Time */}
+                  <p className="text-xs text-forge-muted-dim flex-shrink-0">
+                    {formatRelativeTime(run.updated_at)}
+                  </p>
+
+                  {/* Arrow */}
+                  <span className="material-symbols-outlined text-forge-muted-dim group-hover:text-forge-primary transition-colors" style={{ fontSize: '18px' }}>
+                    chevron_right
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )

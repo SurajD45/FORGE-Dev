@@ -28,12 +28,23 @@ def _call_llm(description: str, expected: str) -> dict:
         return {"type": "error", "message": "JSON decode failed"}
 
 
+def _flatten_history_item(item) -> str:
+    """Safely convert a history entry to a string for LLM consumption."""
+    if isinstance(item, str):
+        return item
+    if isinstance(item, dict):
+        if 'qa_pairs' in item:
+            return "\n".join(str(p) for p in item['qa_pairs'])
+        return json.dumps(item, default=str)
+    return str(item)
+
+
 def run_explorer(user_prompt: str, history: list = None) -> dict:
     """
     Returns type 'questions' with content list, or type 'intent' with
     all required TRD fields at the top level.
     """
-    conversation = "\n".join(history) if history else "Initial prompt only."
+    conversation = "\n".join(_flatten_history_item(h) for h in history) if history else "Initial prompt only."
 
     description = f"""
 User Prompt: {user_prompt}
@@ -48,11 +59,19 @@ QUESTIONS FORMAT (use when more info needed):
   "type": "questions",
   "content": [
     {{
-      "question": "Short targeted question",
-      "options": ["Option A", "Option B", "Option C"]
+      "question": "Short targeted question about a specific requirement",
+      "options": ["Industry Standard Option A", "Industry Standard Option B", "Industry Standard Option C", "Industry Standard Option D"],
+      "type": "hybrid"
     }}
   ]
 }}
+
+QUESTIONS RULES:
+- Each question object MUST have exactly 3 keys: "question" (string), "options" (array of exactly 4 strings), "type" (always "hybrid").
+- The "options" array MUST contain exactly 4 choices representing the most common industry-standard answers for that specific requirement.
+- The user can also type a custom answer, so options should be sensible defaults, not exhaustive.
+- Ask a maximum of 4 targeted questions. Focus on database choice, auth strategy, scale, and core features.
+- Do NOT ask about programming language or framework. The system uses FastAPI + Python. Not negotiable.
 
 INTENT FORMAT (use when ready to extract):
 {{
@@ -71,7 +90,6 @@ STRICT RULES:
 - needs_auth is true ONLY if login, user accounts, or auth is mentioned. Default: false
 - features must be functional capabilities only. No infrastructure. No scale concerns.
 - Extract maximum 6 core features for MVP scope. Prioritize the most critical ones.
-- Do NOT ask about programming language or framework. The system uses FastAPI. Not negotiable.
 - Return raw JSON only. No markdown. No code fences. No explanation.
 """
 
@@ -91,7 +109,7 @@ def force_intent_extraction(user_prompt: str, history: list) -> dict:
     Called when MAX_ROUNDS is hit. Forces the LLM to return intent
     using everything collected in conversation history.
     """
-    conversation = "\n".join(history) if history else "Initial prompt only."
+    conversation = "\n".join(_flatten_history_item(h) for h in history) if history else "Initial prompt only."
 
     description = f"""
 User Prompt: {user_prompt}

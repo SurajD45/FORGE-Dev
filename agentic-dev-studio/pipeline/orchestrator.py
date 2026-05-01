@@ -373,117 +373,276 @@ def stage_reviewer(trd: dict, arch: dict, file_buffer: dict):
     return file_buffer  # Return updated file_buffer
 
 
-def run_pipeline_non_interactive(project_idea: str, pipeline_id: str = None, supabase_client=None):
-    """
-    Non-interactive version of run_pipeline for Celery workers.
-    
-    Args:
-        project_idea: User's project description
-        pipeline_id: UUID of pipeline run in Supabase (optional)
-        supabase_client: Supabase client for status updates (optional)
-    
-    Returns:
-        dict with {success: bool, output_dir: str, error: str}
-    """
-    
-    def update_status(stage: int, status: str):
-        """Helper to update pipeline status in Supabase"""
-        if pipeline_id and supabase_client:
-            try:
-                supabase_client.table('pipeline_runs').update({
-                    'status': status,
-                    'current_stage': stage
-                }).eq('id', pipeline_id).execute()
-            except Exception as e:
-                print(f"Warning: Failed to update status: {e}")
-    
+def _update_pipeline_status(pipeline_id, supabase_client, stage, status, extra_fields=None):
+    """Helper to update pipeline status in Supabase."""
+    if not (pipeline_id and supabase_client):
+        return
     try:
-        print("=== FORGE (P1) - Agentic Dev Studio (Non-Interactive) ===")
-        
-        # Stage 1: Explorer (modified to skip input())
-        update_status(1, 'stage_1_running')
-        print("\n========================================")
-        print(" STAGE 1: Explorer Agent")
-        print("========================================")
-        
-        history = [f"Initial Idea: {project_idea}"]
-        
-        print(f"\n[Forced Extraction Mode] Extracting intent from project idea...")
+        update_data = {'status': status, 'current_stage': stage}
+        if extra_fields:
+            update_data.update(extra_fields)
+        supabase_client.table('pipeline_runs').update(
+            update_data
+        ).eq('id', pipeline_id).execute()
+    except Exception as e:
+        print(f"Warning: Failed to update status: {e}")
+
+
+def _fail_pipeline(pipeline_id, supabase_client, error_msg):
+    """Helper to mark pipeline as failed with an error message."""
+    _update_pipeline_status(pipeline_id, supabase_client, 0, 'failed', {
+        'error_message': error_msg
+    })
+
+
+def _run_stages_2_through_4(trd, arch_unused, pipeline_id, supabase_client):
+    """
+    Execute Stages 2-4 after intent has been extracted.
+    Shared by both the initial and resume paths.
+
+    Returns:
+        dict with {success: bool, output_dir: str, project_name: str, ...}
+    """
+    # Stage 2: Architect
+    _update_pipeline_status(pipeline_id, supabase_client, 2, 'stage_2_running')
+    arch = stage_architect(trd)
+
+    # Stage 3: Developer
+    _update_pipeline_status(pipeline_id, supabase_client, 3, 'stage_3_running')
+    file_buffer = stage_developer(trd, arch)
+
+    # Stage 4: Reviewer (with auto-correction)
+    _update_pipeline_status(pipeline_id, supabase_client, 4, 'stage_4_running')
+    file_buffer = stage_reviewer(trd, arch, file_buffer)
+
+    # Success
+    output_dir = os.path.join(
+        "/app/output" if os.path.exists("/app/output") else
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "output"),
+        "generated", trd['project_name']
+    )
+
+    _update_pipeline_status(pipeline_id, supabase_client, 4, 'completed')
+
+    print("\n========================================")
+    print(" Pipeline Complete")
+    print("========================================")
+
+    return {
+        "success": True,
+        "output_dir": output_dir,
+        "project_name": trd['project_name'],
+        "trd": trd,
+        "arch": arch
+    }
+
+
+def _extract_intent_from_explorer(project_idea, history, current_round, pipeline_id, supabase_client):
+    """
+    Run the Explorer Agent with the given history. Handles three outcomes:
+      1. Explorer returns questions → halt for user input
+      2. Explorer returns intent → return the intent
+      3. MAX_ROUNDS exceeded → force intent extraction
+
+    Returns:
+        dict with either:
+          - {"halted": True, ...}  → pipeline should pause
+          - {"intent": dict, "history": list}  → ready for stages 2-4
+          - {"error": str}  → failure
+    """
+    print(f"\n[Round {current_round + 1}/{MAX_ROUNDS}] Analysing requirements...")
+
+    try:
+        response = run_explorer(project_idea, history)
+    except Exception as e:
+        _fail_pipeline(pipeline_id, supabase_client, f"Explorer failed: {e}")
+        return {"error": f"Explorer failed: {e}"}
+
+    if response.get("type") == "error":
+        _fail_pipeline(pipeline_id, supabase_client, response.get('message'))
+        return {"error": response.get('message')}
+
+    # Explorer returned an intent directly — great, proceed
+    if response.get("type") == "intent":
+        return {"intent": response, "history": history}
+
+    # Explorer returned questions — check if we've exceeded MAX_ROUNDS
+    if current_round + 1 >= MAX_ROUNDS:
+        print(f"\n[Final Round] Extracting intent from collected answers...")
         try:
             final_intent = force_intent_extraction(project_idea, history)
         except Exception as e:
-            update_status(0, 'failed')
-            if pipeline_id and supabase_client:
-                supabase_client.table('pipeline_runs').update({
-                    'error_message': f"Explorer failed: {str(e)}"
-                }).eq('id', pipeline_id).execute()
-            return {"success": False, "error": f"Explorer failed: {e}"}
-        
+            _fail_pipeline(pipeline_id, supabase_client, f"Force extraction failed: {e}")
+            return {"error": f"Force extraction failed: {e}"}
+
         if final_intent.get("type") == "error":
-            error_msg = final_intent.get('message')
-            update_status(0, 'failed')
-            if pipeline_id and supabase_client:
-                supabase_client.table('pipeline_runs').update({
-                    'error_message': error_msg
-                }).eq('id', pipeline_id).execute()
-            return {"success": False, "error": error_msg}
-        
+            _fail_pipeline(pipeline_id, supabase_client, final_intent.get('message'))
+            return {"error": final_intent.get('message')}
+
+        return {"intent": final_intent, "history": history}
+
+    # Explorer returned questions and we have rounds left — halt
+    questions_content = response.get("content", [])
+    _update_pipeline_status(pipeline_id, supabase_client, 1, 'awaiting_user_input', {
+        'explorer_questions': questions_content,
+        'conversation_history': history,
+        'current_round': current_round + 1
+    })
+
+    print(f"\n[Stage 1 Halted] Awaiting user input. Questions sent to frontend.")
+    return {
+        "halted": True,
+        "reason": "awaiting_user_input",
+        "questions": questions_content
+    }
+
+
+def run_pipeline_with_exploration(project_idea: str, pipeline_id: str = None, supabase_client=None):
+    """
+    State-machine version of the pipeline for initial submissions.
+
+    Called by Celery's run_pipeline_task on first submit.
+    May halt at Stage 1 if the Explorer Agent generates questions.
+
+    Args:
+        project_idea: User's project description
+        pipeline_id: UUID of pipeline run in Supabase
+        supabase_client: Supabase client for status updates
+
+    Returns:
+        dict with:
+          - {success: True, halted: True, reason: "awaiting_user_input"} if halted
+          - {success: True, output_dir: str, project_name: str, ...} if completed
+          - {success: False, error: str} if failed
+    """
+    try:
+        print("=== FORGE (P1) - Agentic Dev Studio (With Exploration) ===")
+
+        # Stage 1: Explorer
+        _update_pipeline_status(pipeline_id, supabase_client, 1, 'stage_1_running')
+        print("\n========================================")
+        print(" STAGE 1: Explorer Agent")
+        print("========================================")
+
+        history = [f"Initial Idea: {project_idea}"]
+
+        explorer_result = _extract_intent_from_explorer(
+            project_idea, history, 0, pipeline_id, supabase_client
+        )
+
+        # If halted for user input, return cleanly
+        if explorer_result.get("halted"):
+            return {"success": True, "halted": True, "reason": "awaiting_user_input"}
+
+        # If error, return failure
+        if explorer_result.get("error"):
+            return {"success": False, "error": explorer_result["error"]}
+
+        # Intent extracted — proceed through stages 2-4
+        final_intent = explorer_result["intent"]
         final_intent = apply_deterministic_corrections(final_intent)
         trd = build_trd(final_intent)
-        
+
         try:
             validate_trd(trd)
         except Exception as e:
-            update_status(0, 'failed')
-            if pipeline_id and supabase_client:
-                supabase_client.table('pipeline_runs').update({
-                    'error_message': f"TRD validation failed: {str(e)}"
-                }).eq('id', pipeline_id).execute()
+            _fail_pipeline(pipeline_id, supabase_client, f"TRD validation failed: {e}")
             return {"success": False, "error": f"TRD validation: {e}"}
-        
+
         generate_trd_markdown(trd)
         print(f"\n[Stage 1 Complete] TRD generated for {trd['project_name']}")
-        
-        # Stage 2: Architect
-        update_status(2, 'stage_2_running')
-        arch = stage_architect(trd)
-        
-        # Stage 3: Developer
-        update_status(3, 'stage_3_running')
-        file_buffer = stage_developer(trd, arch)
-        
-        # Stage 4: Reviewer (with auto-correction)
-        update_status(4, 'stage_4_running')
-        file_buffer = stage_reviewer(trd, arch, file_buffer)  # ← Now returns updated file_buffer
-        
-        # Success
-        output_dir = os.path.join(
-            "/app/output" if os.path.exists("/app/output") else
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "output"),
-            "generated", trd['project_name']
-        )
-        
-        update_status(4, 'completed')
-        
-        print("\n========================================")
-        print(" Pipeline Complete (Non-Interactive)")
-        print("========================================")
-        
-        return {
-            "success": True,
-            "output_dir": output_dir,
-            "project_name": trd['project_name'],
-            "trd": trd,
-            "arch": arch
-        }
-        
+
+        return _run_stages_2_through_4(trd, None, pipeline_id, supabase_client)
+
     except Exception as e:
-        update_status(0, 'failed')
-        if pipeline_id and supabase_client:
-            supabase_client.table('pipeline_runs').update({
-                'error_message': str(e)
-            }).eq('id', pipeline_id).execute()
+        _fail_pipeline(pipeline_id, supabase_client, str(e))
         return {"success": False, "error": str(e)}
+
+
+def resume_pipeline(
+    project_idea: str,
+    conversation_history: list,
+    current_round: int,
+    pipeline_id: str = None,
+    supabase_client=None
+):
+    """
+    Resume a pipeline that was halted for user input.
+
+    Called by Celery's resume_pipeline_task after the user submits answers.
+    The conversation_history already includes the user's latest answers
+    (appended by the /resume endpoint).
+
+    Args:
+        project_idea: Original user prompt
+        conversation_history: Full conversation history including latest answers
+        current_round: Current exploration round number
+        pipeline_id: UUID of pipeline run in Supabase
+        supabase_client: Supabase client for status updates
+
+    Returns:
+        dict with same shape as run_pipeline_with_exploration
+    """
+    try:
+        print("=== FORGE (P1) - Agentic Dev Studio (Resume) ===")
+
+        # Stage 1 (resumed): Explorer
+        _update_pipeline_status(pipeline_id, supabase_client, 1, 'stage_1_running')
+        print("\n========================================")
+        print(f" STAGE 1: Explorer Agent (Round {current_round + 1})")
+        print("========================================")
+
+        # Flatten structured conversation_history for the LLM
+        flat_history = [f"Initial Idea: {project_idea}"]
+        for entry in conversation_history:
+            if isinstance(entry, dict) and 'qa_pairs' in entry:
+                for pair in entry['qa_pairs']:
+                    flat_history.append(str(pair))
+            elif isinstance(entry, str):
+                flat_history.append(entry)
+            else:
+                flat_history.append(str(entry))
+
+        explorer_result = _extract_intent_from_explorer(
+            project_idea, flat_history, current_round,
+            pipeline_id, supabase_client
+        )
+
+        # If halted again for more user input, return cleanly
+        if explorer_result.get("halted"):
+            return {"success": True, "halted": True, "reason": "awaiting_user_input"}
+
+        # If error, return failure
+        if explorer_result.get("error"):
+            return {"success": False, "error": explorer_result["error"]}
+
+        # Intent extracted — proceed through stages 2-4
+        final_intent = explorer_result["intent"]
+        final_intent = apply_deterministic_corrections(final_intent)
+        trd = build_trd(final_intent)
+
+        try:
+            validate_trd(trd)
+        except Exception as e:
+            _fail_pipeline(pipeline_id, supabase_client, f"TRD validation failed: {e}")
+            return {"success": False, "error": f"TRD validation: {e}"}
+
+        generate_trd_markdown(trd)
+        print(f"\n[Stage 1 Complete] TRD generated for {trd['project_name']}")
+
+        return _run_stages_2_through_4(trd, None, pipeline_id, supabase_client)
+
+    except Exception as e:
+        _fail_pipeline(pipeline_id, supabase_client, str(e))
+        return {"success": False, "error": str(e)}
+
+
+def run_pipeline_non_interactive(project_idea: str, pipeline_id: str = None, supabase_client=None):
+    """
+    Backwards-compatible wrapper. Delegates to run_pipeline_with_exploration.
+    Kept for any existing callers that expect the old signature.
+    """
+    return run_pipeline_with_exploration(project_idea, pipeline_id, supabase_client)
 
 
 def run_pipeline():
