@@ -1,4 +1,4 @@
-import { STAGE_LABELS, type PipelineStatus, STAGE_MAP } from '@/types/pipeline'
+import { STAGE_LABELS, type PipelineStatus } from '@/types/pipeline'
 
 interface StageIndicatorProps {
   status: PipelineStatus
