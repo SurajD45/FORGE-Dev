@@ -124,6 +124,26 @@ export default function Artifacts() {
         </div>
       </div>
 
+      {/* ── Initial Prompt ───────────────────────── */}
+      {result.project_idea && (
+        <div className="px-8 py-4 border-b border-forge-border/20">
+          <div className="forge-card p-4 bg-forge-primary/5 border-forge-primary/15">
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-forge-primary flex-shrink-0 mt-0.5"
+                    style={{ fontSize: '18px' }}>auto_awesome</span>
+              <div>
+                <p className="text-xs text-forge-muted-dim uppercase tracking-wide font-semibold mb-1">
+                  Initial Prompt
+                </p>
+                <p className="text-sm text-forge-text leading-relaxed">
+                  {result.project_idea}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── AI Review Summary ──────────────────────── */}
       <div className="px-8 py-3 border-b border-forge-border/20 flex items-center gap-3">
         <span className="text-xs font-bold text-forge-muted-dim uppercase tracking-wide">AI Review Summary</span>

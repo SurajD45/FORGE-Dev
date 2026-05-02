@@ -19,9 +19,6 @@ const iconNavLinks = [
 const contextNav = [
   { icon: 'dashboard', label: 'Overview', to: '/dashboard' },
   { icon: 'account_tree', label: 'Flow Editor', to: '/dashboard' },
-  { icon: 'schema', label: 'Environment', to: '/dashboard' },
-  { icon: 'memory', label: 'Training', to: '/dashboard' },
-  { icon: 'rocket_launch', label: 'Deployment', to: '/dashboard' },
 ]
 
 const bottomNav = [
