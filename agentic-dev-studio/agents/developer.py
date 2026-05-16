@@ -1,16 +1,47 @@
 import os
 import re
+import ast
 import json
 
 
 def _call_llm(description: str) -> str:
     """Single LLM call with key rotation. Returns raw string output."""
     from utils.llm_client import call_with_key_rotation
-    return call_with_key_rotation(
-        model="groq/llama-3.3-70b-versatile",
-        description=description,
-        expected="Raw Python code only. No markdown. No code fences. No explanation."
-    )
+    from utils.telemetry import log_event
+    import time
+
+    _start = time.monotonic()
+    try:
+        result = call_with_key_rotation(
+            model="groq/llama-3.3-70b-versatile",
+            description=description,
+            expected="Raw Python code only. No markdown. No code fences. No explanation."
+        )
+        log_event(
+            stage="STAGE_3_DEVELOPER",
+            event_type="INFO",
+            message="LLM call completed",
+            metadata={
+                "action_type": "LLM_CALL",
+                "duration_ms": int((time.monotonic() - _start) * 1000),
+                "model": "groq/llama-3.3-70b-versatile",
+                "prompt_chars": len(description),
+            },
+        )
+        return result
+    except Exception as e:
+        if "rate_limit" in str(e).lower():
+            log_event(
+                stage="STAGE_3_DEVELOPER",
+                event_type="RATE_LIMIT",
+                message=f"Rate limit hit on LLM call",
+                metadata={
+                    "action_type": "RATE_LIMIT",
+                    "model": "groq/llama-3.3-70b-versatile",
+                    "error": str(e)[:200],
+                },
+            )
+        raise  # re-raise — don't swallow the error
 
 
 def strip_code_fences(code: str) -> str:
@@ -23,6 +54,64 @@ def strip_code_fences(code: str) -> str:
     return code.strip()
 
 
+class _SignatureExtractor(ast.NodeTransformer):
+    """
+    AST NodeTransformer that strips function/method bodies while preserving:
+    - Function and method signatures (name, args, decorators, return type)
+    - Docstrings (first expression statement if it's a string constant)
+    - Class-level attributes (Column defs, __tablename__, Pydantic fields)
+    - All import statements and module-level assignments
+
+    Uses NodeTransformer instead of ast.walk to avoid mutating the tree
+    mid-traversal, which causes cyclic references and OOM kills.
+    """
+
+    def _strip_body(self, node):
+        """Replace a function body with a placeholder, preserving its docstring."""
+        placeholder = ast.Expr(
+            value=ast.Constant(value="... implementation hidden ...")
+        )
+        docstring = ast.get_docstring(node)
+        if docstring:
+            node.body = [
+                ast.Expr(value=ast.Constant(value=docstring)),
+                placeholder,
+            ]
+        else:
+            node.body = [placeholder]
+        return node
+
+    def visit_FunctionDef(self, node):
+        """Strip sync function bodies. Visit children first (bottom-up)."""
+        self.generic_visit(node)
+        return self._strip_body(node)
+
+    def visit_AsyncFunctionDef(self, node):
+        """Strip async function bodies. Visit children first (bottom-up)."""
+        self.generic_visit(node)
+        return self._strip_body(node)
+
+
+def get_code_signatures(code: str) -> str:
+    """
+    Strips implementation logic from Python source code using AST,
+    keeping only class/function/method signatures with a placeholder body.
+    Reduces token count by ~70-80% while preserving import context.
+
+    Uses ast.NodeTransformer for safe tree rewriting — no in-place mutation
+    during traversal, eliminating cyclic-reference OOM on the Celery worker.
+    """
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        # If code can't be parsed, return it as-is (better than nothing)
+        return code
+
+    optimized_tree = _SignatureExtractor().visit(tree)
+    ast.fix_missing_locations(optimized_tree)
+    return ast.unparse(optimized_tree)
+
+
 def generate_file(
     filename: str,
     trd: dict,
@@ -32,7 +121,8 @@ def generate_file(
 ) -> str:
     """
     Generates Python code for a single file.
-    Injects TRD + ARCH + all previously generated files as context.
+    Injects lean-scoped TRD + ARCH + AST-optimized previously generated files
+    as context to stay within the 1GB worker memory budget.
     """
     responsibility = arch["module_responsibilities"].get(filename, "No description provided.")
     project_name = arch["project_name"]
@@ -40,13 +130,41 @@ def generate_file(
     auth = trd["auth"]
     file_list = arch["file_list"]
 
-    # Build context from previously generated files
+    # --- Lean TRD: only core fields + features relevant to this file ---
+    file_stem = filename.replace(".py", "").replace("_routes", "").replace("_", " ")
+    relevant_features = []
+    for feature in trd.get("features", []):
+        feature_name = feature if isinstance(feature, str) else feature.get("name", "")
+        # Include feature if it matches the file stem, or for core infra files
+        if (file_stem.lower() in feature_name.lower()
+                or filename in ("main.py", "config.py", "database.py", "models.py", "auth.py")):
+            relevant_features.append(feature)
+
+    lean_trd = {
+        "database": database,
+        "auth": auth,
+        "features": relevant_features if relevant_features else trd.get("features", []),
+    }
+    # Carry over app_name / description if present (lightweight scalar fields)
+    for key in ("app_name", "description", "project_name"):
+        if key in trd:
+            lean_trd[key] = trd[key]
+
+    # --- Lean ARCH: only what this specific file needs ---
+    lean_arch = {
+        "project_name": project_name,
+        "file_list": file_list,
+        "current_file": filename,
+        "responsibility": responsibility,
+    }
+
+    # Build context from previously generated files (AST-optimized signatures)
     context_files = ""
     if generated_so_far:
         context_files = "\n\n--- PREVIOUSLY GENERATED FILES ---\n"
         context_files += "Use these for all imports. Match ALL class names, function names, variable names exactly.\n"
         for fname, code in generated_so_far.items():
-            context_files += f"\n### {fname}\n{code}\n"
+            context_files += f"\n### {fname}\n{get_code_signatures(code)}\n"
 
     retry_note = ""
     if previous_error:
@@ -64,11 +182,11 @@ Generate the complete Python file: {filename}
 PROJECT: {project_name}
 FILE RESPONSIBILITY: {responsibility}
 
-TRD:
-{json.dumps(trd, indent=2)}
+TRD (scoped):
+{json.dumps(lean_trd, indent=2)}
 
-ARCH:
-{json.dumps(arch, indent=2)}
+ARCH (scoped):
+{json.dumps(lean_arch, indent=2)}
 {context_files}
 {retry_note}
 
@@ -101,7 +219,20 @@ FILE-SPECIFIC RULES:
 """
 
     raw = _call_llm(description)
-    return strip_code_fences(raw)
+    code = strip_code_fences(raw)
+    from utils.telemetry import log_event
+    log_event(
+        stage="STAGE_3_DEVELOPER",
+        event_type="INFO",
+        message=f"Generated file: {filename}",
+        metadata={
+            "action_type": "FILE_GENERATED",
+            "filename": filename,
+            "output_chars": len(code),
+            "project": project_name,
+        },
+    )
+    return code
 
 
 def _get_auth_rules(auth: str) -> str:
@@ -253,25 +384,48 @@ def generate_readme(
 ) -> str:
     """
     Generates a README.md for the project using LLM.
-    Injects full TRD, ARCH, and all generated file contents as context.
+    Injects lean-scoped TRD/ARCH summaries and AST-optimized file signatures
+    as context to stay within the 1GB worker memory budget.
     Returns raw markdown string.
     """
-    import json
 
+    # --- Lean TRD summary: only metadata a README needs ---
+    feature_names = []
+    for feature in trd.get("features", []):
+        if isinstance(feature, str):
+            feature_names.append(feature)
+        elif isinstance(feature, dict):
+            feature_names.append(feature.get("name", "unnamed"))
+
+    lean_trd_summary = {
+        "app_name": trd.get("app_name", trd.get("project_name", "FastAPI Project")),
+        "description": trd.get("description", ""),
+        "database": trd.get("database", "sqlite"),
+        "auth": trd.get("auth", "none"),
+        "feature_names": feature_names,
+    }
+
+    # --- Lean ARCH summary: file tree + project name only ---
+    lean_arch_summary = {
+        "project_name": arch.get("project_name", ""),
+        "file_list": arch.get("file_list", []),
+    }
+
+    # AST-optimized file signatures (no raw implementation code)
     files_context = ""
     for fname, code in generated_files.items():
-        files_context += f"\n### {fname}\n{code}\n"
+        files_context += f"\n### {fname}\n{get_code_signatures(code)}\n"
 
     description = f"""
 Generate a professional README.md for this FastAPI project.
 
-PROJECT TRD:
-{json.dumps(trd, indent=2)}
+PROJECT SUMMARY:
+{json.dumps(lean_trd_summary, indent=2)}
 
-PROJECT ARCHITECTURE:
-{json.dumps(arch, indent=2)}
+PROJECT STRUCTURE:
+{json.dumps(lean_arch_summary, indent=2)}
 
-GENERATED SOURCE FILES:
+GENERATED SOURCE FILES (signatures only):
 {files_context}
 
 README MUST INCLUDE:

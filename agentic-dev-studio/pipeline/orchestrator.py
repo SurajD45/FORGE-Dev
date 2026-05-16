@@ -140,6 +140,9 @@ def stage_architect(trd: dict):
     print(f"  Entry    : {arch['entry_file']}")
     print("  ARCH.json and ARCH.md written to output/")
 
+    from utils.telemetry import log_event
+    log_event("STAGE_2_ARCHITECT", "INFO", f"Architecture generated: {len(arch['file_list'])} files", metadata={"action_type": "STAGE_COMPLETE", "file_count": len(arch['file_list'])})
+
     return arch
 
 
@@ -178,6 +181,8 @@ def _call_with_rate_limit_retry(fn, *args, **kwargs):
         except litellm.RateLimitError as e:
             if attempt == max_wait_retries:
                 raise
+            from utils.telemetry import log_event
+            log_event("ORCHESTRATOR", "RATE_LIMIT", f"Rate limit hit, retry {attempt}/{max_wait_retries}", metadata={"action_type": "RATE_LIMIT", "attempt": attempt, "wait_seconds": wait_seconds})
             print(f"    Rate limit hit. Waiting {wait_seconds}s before retry {attempt}/{max_wait_retries}...")
             time.sleep(wait_seconds)
             wait_seconds += 15
@@ -272,6 +277,9 @@ def stage_developer(trd: dict, arch: dict):
     for fname in generation_order:
         print(f"    - {fname}")
     print(f"    - README.md")
+
+    from utils.telemetry import log_event
+    log_event("STAGE_3_DEVELOPER", "INFO", f"Code generation complete: {len(file_buffer)} files", metadata={"action_type": "STAGE_COMPLETE", "file_count": len(file_buffer), "project": project_name})
 
     return file_buffer
 
@@ -369,7 +377,10 @@ def stage_reviewer(trd: dict, arch: dict, file_buffer: dict):
     
     print(f"\n[Stage 4 Complete]")
     print(f"  REVIEW_REPORT.md written to {report_path}")
-    
+
+    from utils.telemetry import log_event
+    log_event("STAGE_4_REVIEWER", "INFO", f"Review complete: {len(files_checked)} files checked", metadata={"action_type": "STAGE_COMPLETE", "files_checked": len(files_checked), "corrections": len(correction_log)})
+
     return file_buffer  # Return updated file_buffer
 
 
@@ -390,6 +401,8 @@ def _update_pipeline_status(pipeline_id, supabase_client, stage, status, extra_f
 
 def _fail_pipeline(pipeline_id, supabase_client, error_msg):
     """Helper to mark pipeline as failed with an error message."""
+    from utils.telemetry import log_event
+    log_event("ORCHESTRATOR", "CRITICAL", f"Pipeline failed: {error_msg[:200]}", pipeline_id=pipeline_id, metadata={"action_type": "PIPELINE_ERROR", "error": error_msg[:500]})
     _update_pipeline_status(pipeline_id, supabase_client, 0, 'failed', {
         'error_message': error_msg
     })
